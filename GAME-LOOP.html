@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LOGIC LOOP - Accessible HCI Prototype</title>
+    
+<script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles based on the provided UI design */
+        :root {
+            --light-bg: #e0f2f7; /* Light blue/cyan background */
+            --card-bg: #ffffff; /* White card background */
+            --primary-button-bg: #22d3ee; /* Cyan-400 */
+            --primary-button-hover-bg: #06b6d4; /* Cyan-500 */
+            --text-color: #1f2937; /* Dark gray text */
+            --border-color: #bae6fd; /* Light blue border */
+            --tile-bg: #dbeafe; /* Light blue tile background */
+            --path-color: #93c5fd; /* Medium blue path */
+            --glow-color: #3b82f6; /* Strong blue for glow/connection */
+            --start-end-color: #f59e0b; /* Amber for start/end points */
+        }
+        body {
+            background-color: var(--light-bg);
+            color: var(--text-color);
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 1rem;
+        }
+
+        /* Card/Screen Container Styling */
+        .ui-card {
+            background-color: var(--card-bg);
+            border-radius: 1rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            padding: 2rem;
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+        }
+
+        /* Buttons Styling (matching the light blue theme) */
+        .ui-button {
+            display: block;
+            width: 100%;
+            padding: 0.75rem 1.5rem;
+            margin-bottom: 1rem;
+            border-radius: 0.5rem;
+            font-weight: bold;
+            color: white;
+            background-color: var(--primary-button-bg);
+            transition: background-color 0.2s ease-in-out;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .ui-button:hover:not(:disabled) {
+            background-color: var(--primary-button-hover-bg);
+        }
+        .ui-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        /* Game Grid and Tiles Styling */
+        #gameGrid {
+            display: grid;
+            grid-template-columns: repeat(var(--grid-size), 1fr);
+            gap: 2px;
+            border: 4px solid var(--border-color);
+            box-shadow: 0 0 10px rgba(186, 230, 253, 0.5); /* Soft border glow */
+            margin: 0 auto; /* Center the grid */
+            max-width: 300px; /* Constrain grid size within card */
+            aspect-ratio: 1 / 1; /* Ensure grid is square */
+        }
+        .tile {
+            width: 100%;
+            padding-top: 100%;
+            position: relative;
+            background-color: var(--tile-bg);
+            cursor: pointer;
+            transition: all 0.1s ease-in-out;
+            border-radius: 4px;
+            outline: none;
+        }
+        .tile:hover, .tile:focus {
+            background-color: #bfdbfe; /* Lighter blue on hover/focus */
+            transform: scale(1.05);
+        }
+        .path {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 100%;
+            height: 100%;
+            transform: translate(-50%, -50%);
+            border-radius: 4px;
+            box-sizing: border-box;
+            background-color: var(--tile-bg);
+        }
+        .tile.connected .path-segment {
+             background-color: var(--glow-color);
+             box-shadow: 0 0 8px var(--glow-color);
+        }
+        .path-segment {
+            background-color: var(--path-color);
+            position: absolute;
+            transition: background-color 0.3s ease, box-shadow 0.3s ease;
+        }
+        /* Segment Definitions (same as before) */
+        .type-0 .path-segment-h { top: 40%; height: 20%; left: 0; width: 100%; }
+        .type-0 .path-segment-v { top: 0; height: 100%; left: 40%; width: 20%; }
+        .type-1 .path-segment-v { top: 0; height: 100%; left: 40%; width: 20%; }
+        .type-2 .path-segment-t { top: 0; height: 60%; left: 40%; width: 20%; }
+        .type-2 .path-segment-r { top: 40%; height: 20%; left: 40%; width: 60%; }
+        /* Start/End nodes */
+        .start-node::after, .end-node::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 60%;
+            height: 60%;
+            border-radius: 50%;
+            background-color: var(--start-end-color);
+            box-shadow: 0 0 15px var(--start-end-color);
+            z-index: 10;
+        }
+
+        /* Accessibility/Aria Feedback - keeping for screen readers but visually subtle */
+        [aria-label]::after {
+            content: attr(aria-label);
+            position: absolute;
+            bottom: 5px; /* Adjust position */
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.65rem; /* Smaller, less intrusive */
+            color: rgba(0, 0, 0, 0.3); /* Darker text for light background */
+            white-space: nowrap; /* Prevent wrapping */
+            overflow: hidden; /* Hide overflow */
+            text-overflow: ellipsis; /* Add ellipsis if hidden */
+            max-width: 90%; /* Ensure it stays within bounds */
+        }
+
+        /* Toggle Switch Styling for Settings */
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 48px; /* Larger switch */
+            height: 28px;
+        }
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 28px; /* Make it round */
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider {
+            background-color: var(--primary-button-bg);
+        }
+        input:focus + .slider {
+            box-shadow: 0 0 1px var(--primary-button-bg);
+        }
+        input:checked + .slider:before {
+            transform: translateX(20px);
+        }
+
+        /* Checkbox Styling for Accessibility */
+        .custom-checkbox {
+            display: inline-block;
+            vertical-align: middle;
+            position: relative;
+            width: 24px;
+            height: 24px;
+            border: 2px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .custom-checkbox input[type="checkbox"] {
+            opacity: 0;
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+        .custom-checkbox::after {
+            content: '';
+            position: absolute;
+            left: 8px; /* Adjusted checkmark position */
+            top: 4px; /* Adjusted checkmark position */
+            width: 6px;
+            height: 12px;
+            border: solid white;
+            border-width: 0 3px 3px 0;
+            transform: rotate(45deg);
+            opacity: 0;
+            transition: all 0.2s ease;
+        }
+        .custom-checkbox input[type="checkbox"]:checked + .custom-checkbox {
+            background-color: var(--primary-button-bg);
+            border-color: var(--primary-button-bg);
+        }
+        .custom-checkbox input[type="checkbox"]:checked + .custom-checkbox::after {
+            opacity: 1;
+        }
+
+        /* Loading spinner CSS for API interactions */
+        .loader {
+            border: 4px solid rgba(0, 0, 0, 0.2);
+            border-top: 4px solid var(--text-color);
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-left: 8px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    
+<div id="mainMenuScreen" class="ui-card">
+        <!-- CUSTOM LOGO SVG -->
+        <svg class="mx-auto mb-6" width="80" height="80" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <!-- Background Circle -->
+            <circle cx="50" cy="50" r="48" fill="#bae6fd" stroke="#06b6d4" stroke-width="2"/>
+            <!-- Inner Loop/Circuit Path -->
+            <path d="M 20 50 C 20 20, 80 20, 80 50 C 80 80, 20 80, 20 50" 
+                  stroke="#22d3ee" stroke-width="8" stroke-linecap="round" fill="none"
+                  stroke-dasharray="100" stroke-dashoffset="0">
+                <animate attributeName="stroke-dashoffset" from="100" to="0" dur="2s" fill="freeze" />
+            </path>
+            <!-- Start/End Nodes -->
+            <circle cx="20" cy="50" r="10" fill="#f59e0b" stroke="white" stroke-width="3"/>
+            <circle cx="80" cy="50" r="10" fill="#f59e0b" stroke="white" stroke-width="3"/>
+        </svg>
+        <h1 class="text-3xl font-bold mb-8 text-gray-800">LOGIC LOOP</h1>
+        <button class="ui-button" onclick="showScreen('gameScreen')">Start</button>
+        <button class="ui-button" onclick="showScreen('settingsScreen')">Settings</button>
+    </div>
+
+    
+
+<div id="gameScreen" class="ui-card hidden">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-xl font-semibold text-gray-700">LEVEL <span id="currentLevelDisplay">1</span></h2>
+            
+
+<span class="text-xl font-semibold text-gray-700">00</span>
+        </div>
+        
+        <p id="messageBox" class="text-md font-medium mb-4 h-6 text-gray-600 transition-all duration-500"></p>
+
+        <div id="gameGrid" class="mb-6">
+            
+
+</div>
+
+        <div class="flex justify-between gap-4 mb-4">
+            <button id="resetButton" class="ui-button !bg-red-500 hover:!bg-red-600 flex-1">Reset</button>
+            <button id="nextLevelButton" class="ui-button flex-1" disabled>Next</button>
+        </div>
+
+        <div class="flex justify-between gap-4">
+            
+
+<button id="hintButton" class="ui-button !bg-fuchsia-500 hover:!bg-fuchsia-600 flex-1 flex items-center justify-center text-sm" disabled>
+                Get Hint ✨
+            </button>
+            
+            
+
+<button id="briefingButton" class="ui-button !bg-purple-500 hover:!bg-purple-600 flex-1 flex items-center justify-center text-sm">
+                Briefing ✨
+            </button>
+        </div>
+    </div>
+
+    
+
+<div id="settingsScreen" class="ui-card hidden">
+        <h2 class="text-2xl font-bold mb-6 text-gray-800">Settings</h2>
+        <div class="mb-4 flex justify-between items-center">
+            <span class="text-lg text-gray-700">Sound</span>
+            <label class="toggle-switch">
+                <input type="checkbox" id="soundToggle" checked>
+                <span class="slider"></span>
+            </label>
+        </div>
+        <button class="ui-button !bg-gray-400 hover:!bg-gray-500" onclick="showScreen('accessibilityScreen')">Accessibility</button>
+        <button class="ui-button !bg-gray-300 hover:!bg-gray-400 text-gray-800" onclick="showScreen('mainMenuScreen')">Back</button>
+    </div>
+
+    
+
+<div id="accessibilityScreen" class="ui-card hidden">
+        <h2 class="text-2xl font-bold mb-6 text-gray-800">Accessibility</h2>
+        <div class="mb-4 flex justify-between items-center">
+            <span class="text-lg text-gray-700">Color Blind Mode</span>
+            <label class="custom-checkbox">
+                <input type="checkbox" id="colorBlindMode">
+                <span class="custom-checkbox"></span>
+            </label>
+        </div>
+        <div class="mb-4 flex justify-between items-center">
+            <span class="text-lg text-gray-700">Large Text</span>
+            <label class="custom-checkbox">
+                <input type="checkbox" id="largeTextMode">
+                <span class="custom-checkbox"></span>
+            </label>
+        </div>
+        <button class="ui-button !bg-gray-300 hover:!bg-gray-400 text-gray-800" onclick="showScreen('settingsScreen')">Back</button>
+    </div>
+
+    
+
+<audio id="audioPlayer" hidden></audio>
+
+
+<script>
+    // --- HCI Focused JavaScript Implementation for LOGIC LOOP ---
+
+    const GRID_SIZE = 4;
+    const TILE_TYPES = [
+        { id: 0, segments: ['h', 'v'] }, // Cross (+)
+        { id: 1, segments: ['v'] },      // Straight (|)
+        { id: 2, segments: ['t', 'r'] }  // Elbow (L)
+    ];
+
+    const gameGrid = document.getElementById('gameGrid');
+    const messageBox = document.getElementById('messageBox');
+    const resetButton = document.getElementById('resetButton');
+    const nextLevelButton = document.getElementById('nextLevelButton');
+    const hintButton = document.getElementById('hintButton');
+    const briefingButton = document.getElementById('briefingButton');
+    const audioPlayer = document.getElementById('audioPlayer');
+    const currentLevelDisplay = document.getElementById('currentLevelDisplay');
+
+    // Accessibility Toggles
+    const soundToggle = document.getElementById('soundToggle');
+    const colorBlindModeToggle = document.getElementById('colorBlindMode');
+    const largeTextModeToggle = document.getElementById('largeTextMode');
+
+    let currentLevel = 1;
+    let tiles = [];
+    let isGameComplete = false;
+    let isLoading = false;
+    let isSoundOn = true; // Initial state for sound
+
+    // --- Gemini API Configuration ---
+    // You MUST replace this with your actual API Key. 
+    // It's recommended to load this securely, not directly in client-side code for production.
+    const apiKey = ""; 
+    const LLM_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+    const TTS_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`;
+    
+    // Voice configuration for TTS (Informative/Firm voice)
+    const TTS_VOICE_CONFIG = {
+        speechConfig: {
+            voiceConfig: {
+                prebuiltVoiceConfig: { voiceName: "Charon" } 
+            }
+        },
+        responseModalities: ["AUDIO"],
+    };
+
+    // --- UI Screen Management ---
+    function showScreen(screenId) {
+        document.querySelectorAll('.ui-card').forEach(screen => {
+            screen.classList.add('hidden');
+        });
+        document.getElementById(screenId).classList.remove('hidden');
+
+        if (screenId === 'gameScreen') {
+            startGame(currentLevel); // Start game logic when game screen is shown
+        } else {
+            // Stop audio if navigating away from game screen
+            if (audioPlayer.src) {
+                audioPlayer.pause();
+                audioPlayer.currentTime = 0;
+            }
+        }
+    }
+
+    // --- Utility Functions for API and Audio Handling ---
+
+    async function fetchWithExponentialBackoff(url, options, retries = 3) {
+        for (let i = 0; i < retries; i++) {
+            try {
+                const response = await fetch(url, options);
+                if (response.status === 429 && i < retries - 1) {
+                    const delay = Math.pow(2, i) * 1000;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    continue;
+                }
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response;
+            } catch (error) {
+                if (i === retries - 1) throw error;
+            }
+        }
+    }
+
+    function base64ToArrayBuffer(base64) {
+        const binaryString = atob(base64);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+        return bytes.buffer;
+    }
+
+    function pcmToWav(pcm16, sampleRate = 24000) {
+        const numChannels = 1;
+        const bytesPerSample = 2;
+        const blockAlign = numChannels * bytesPerSample;
+        const byteRate = sampleRate * blockAlign;
+        const dataSize = pcm16.length * bytesPerSample;
+
+        const buffer = new ArrayBuffer(44 + dataSize);
+        const view = new DataView(buffer);
+        let offset = 0;
+
+        writeString('RIFF', view, offset); offset += 4;
+        view.setUint32(offset, 36 + dataSize, true); offset += 4;
+        writeString('WAVE', view, offset); offset += 4;
+
+        writeString('fmt ', view, offset); offset += 4;
+        view.setUint32(offset, 16, true); offset += 4;
+        view.setUint16(offset, 1, true); offset += 2;
+        view.setUint16(offset, numChannels, true); offset += 2;
+        view.setUint32(offset, sampleRate, true); offset += 4;
+        view.setUint32(offset, byteRate, true); offset += 4;
+        view.setUint16(offset, blockAlign, true); offset += 2;
+        view.setUint16(offset, bytesPerSample * 8, true); offset += 2;
+
+        writeString('data', view, offset); offset += 4;
+        view.setUint32(offset, dataSize, true); offset += 4;
+
+        const pcmView = new Int16Array(buffer, offset);
+        pcmView.set(pcm16);
+
+        return new Blob([buffer], { type: 'audio/wav' });
+    }
+
+    function writeString(s, view, offset) {
+        for (let i = 0; i < s.length; i++) {
+            view.setUint8(offset + i, s.charCodeAt(i));
+        }
+    }
+
+    // --- Core Game State and Logic ---
+
+    function generateLevel(level) {
+        const start = { x: 0, y: Math.floor(GRID_SIZE / 2) };
+        const end = { x: GRID_SIZE - 1, y: Math.floor(GRID_SIZE / 2) };
+
+        tiles = [];
+        for (let y = 0; y < GRID_SIZE; y++) {
+            for (let x = 0; x < GRID_SIZE; x++) {
+                const isStart = x === start.x && y === start.y;
+                const isEnd = x === end.x && y === end.y;
+                let typeId = Math.floor(Math.random() * TILE_TYPES.length);
+                let rotation = Math.floor(Math.random() * 4) * 90;
+
+                if (isStart || isEnd) {
+                    typeId = 1;
+                    rotation = 90;
+                }
+
+                tiles.push({
+                    x, y,
+                    id: `${x}-${y}`,
+                    typeId: typeId,
+                    rotation: rotation,
+                    isStart, isEnd,
+                    isComplete: false,
+                });
+            }
+        }
+
+        tiles.filter(t => !t.isStart && !t.isEnd).forEach(t => {
+            t.rotation = Math.floor(Math.random() * 4) * 90;
+        });
+
+        isGameComplete = false;
+        hintButton.disabled = false;
+        currentLevelDisplay.textContent = level;
+    }
+
+    function render() {
+        gameGrid.style.setProperty('--grid-size', GRID_SIZE);
+        gameGrid.innerHTML = '';
+
+        tiles.forEach(tile => {
+            const tileEl = document.createElement('div');
+            tileEl.className = `tile type-${tile.typeId} relative rounded-md transition-shadow duration-300`;
+            tileEl.id = tile.id;
+            tileEl.setAttribute('role', 'button');
+            tileEl.setAttribute('tabindex', '0');
+
+            const typeName = TILE_TYPES[tile.typeId].segments.length === 2 ? 'Cross' : (tile.typeId === 1 ? 'Straight' : 'Elbow');
+            tileEl.setAttribute('aria-label', `Tile at (${tile.x}, ${tile.y}), Type: ${typeName}. Click to rotate.`);
+
+            const pathEl = document.createElement('div');
+            pathEl.className = 'path';
+            pathEl.style.transform = `translate(-50%, -50%) rotate(${tile.rotation}deg)`;
+
+            TILE_TYPES[tile.typeId].segments.forEach(seg => {
+                const segEl = document.createElement('div');
+                segEl.className = `path-segment path-segment-${seg}`;
+                pathEl.appendChild(segEl);
+            });
+
+            tileEl.appendChild(pathEl);
+
+            if (tile.isStart) tileEl.classList.add('start-node');
+            if (tile.isEnd) tileEl.classList.add('end-node');
+            if (tile.isComplete) tileEl.classList.add('connected', 'shadow-2xl');
+
+            tileEl.addEventListener('click', () => {
+                if (isGameComplete || tile.isStart || tile.isEnd || isLoading) return;
+                rotateTile(tile);
+                checkCircuit();
+                render();
+            });
+
+            tileEl.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    if (isGameComplete || tile.isStart || tile.isEnd || isLoading) return;
+                    rotateTile(tile);
+                    checkCircuit();
+                    render();
+                }
+            });
+
+            gameGrid.appendChild(tileEl);
+        });
+        updateControls();
+        applyAccessibilitySettings(); // Apply settings after rendering
+    }
+
+    function rotateTile(tile) {
+        tile.rotation = (tile.rotation + 90) % 360;
+    }
+
+    function getConnections(tile) {
+        const typeId = tile.typeId;
+        const baseConnections = {
+            0: [0, 1, 2, 3], // Cross
+            1: [0, 2],       // Straight (Vertical)
+            2: [0, 1]        // Elbow (Top & Right)
+        }[typeId];
+
+        const rotationCount = tile.rotation / 90;
+
+        return baseConnections.map(dir => (dir + rotationCount) % 4);
+    }
+
+    function getNeighbor(x, y, dir) {
+        let nx = x, ny = y;
+        if (dir === 0) ny--;
+        else if (dir === 1) nx++;
+        else if (dir === 2) ny++;
+        else if (dir === 3) nx--;
+
+        if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
+            return tiles.find(t => t.x === nx && t.y === ny);
+        }
+        return null;
+    }
+
+    function checkCircuit() {
+        tiles.forEach(t => t.isComplete = false);
+        const startTile = tiles.find(t => t.isStart);
+        if (!startTile) return;
+
+        const stack = [startTile];
+        startTile.isComplete = true;
+
+        let foundEnd = false;
+
+        while (stack.length > 0) {
+            const current = stack.pop();
+
+            if (current.isEnd) {
+                foundEnd = true;
+                continue;
+            }
+
+            const currentConnections = getConnections(current);
+
+            for (const dir of currentConnections) {
+                const neighbor = getNeighbor(current.x, current.y, dir);
+                if (!neighbor || neighbor.isComplete) continue;
+
+                const neighborRequiredConnection = (dir + 2) % 4;
+                const neighborConnections = getConnections(neighbor);
+
+                if (neighborConnections.includes(neighborRequiredConnection)) {
+                    neighbor.isComplete = true;
+                    stack.push(neighbor);
+                }
+            }
+        }
+
+        isGameComplete = foundEnd;
+        updateMessage();
+    }
+
+    function updateMessage() {
+        if (isGameComplete) {
+            messageBox.textContent = `LEVEL ${currentLevel} COMPLETE!`;
+            messageBox.className = 'text-md font-medium mb-4 h-6 text-blue-600 animate-pulse';
+            nextLevelButton.disabled = false;
+            hintButton.disabled = true;
+        } else {
+            if (!isLoading) {
+                messageBox.textContent = 'Connect the circuit.';
+                messageBox.className = 'text-md font-medium mb-4 h-6 text-gray-600';
+            }
+            nextLevelButton.disabled = true;
+            hintButton.disabled = false;
+        }
+    }
+
+    function updateControls() {
+        nextLevelButton.textContent = `Next`;
+        if (isLoading) {
+            hintButton.innerHTML = 'Thinking <span class="loader"></span>';
+            briefingButton.innerHTML = 'Loading <span class="loader"></span>';
+        } else {
+            hintButton.innerHTML = 'Get Hint ✨';
+            briefingButton.innerHTML = 'Briefing ✨';
+        }
+
+        resetButton.disabled = isLoading;
+        hintButton.disabled = isLoading || isGameComplete;
+        briefingButton.disabled = isLoading;
+        gameGrid.style.pointerEvents = isLoading ? 'none' : 'auto';
+    }
+
+    function setLoading(state) {
+        isLoading = state;
+        updateControls();
+        if (isLoading) {
+            messageBox.textContent = 'Awaiting System Response...';
+            messageBox.className = 'text-md font-medium mb-4 h-6 text-gray-500';
+        } else {
+            updateMessage();
+        }
+    }
+
+
+    // --- Gemini LLM Integrations ---
+
+    function serializeGameState() {
+        const state = tiles.map(t => {
+            const segments = TILE_TYPES[t.typeId].segments.join(',');
+            const connections = getConnections(t);
+            return `{ID: ${t.id}, Segments: [${segments}], Rotation: ${t.rotation}, Connections: [${connections}], Start: ${t.isStart}, End: ${t.isEnd}, Connected: ${t.isComplete}}`;
+        }).join('; ');
+        
+        return `Grid Size: ${GRID_SIZE}x${GRID_SIZE}. Tiles (Connections are 0:Up, 1:Right, 2:Down, 3:Left): ${state}`;
+    }
+
+    hintButton.addEventListener('click', async () => {
+        if (isLoading || isGameComplete) return;
+        setLoading(true);
+
+        const gameState = serializeGameState();
+        const userQuery = `The current state of the LOGIC LOOP puzzle is: ${gameState}. The grid is ${GRID_SIZE}x${GRID_SIZE}. Tiles that are part of the connected circuit are marked 'Connected: true'. Provide a concise hint (under 30 words) to help the user connect the circuit to the next tile that is not yet connected. Do not give the exact rotation needed. Focus on the most optimal next move.`;
+
+        try {
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: {
+                    parts: [{ text: "You are a helpful, concise AI assistant for a circuit puzzle game. Your hints must be short and direct." }]
+                }
+            };
+            
+            const response = await fetchWithExponentialBackoff(LLM_API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json();
+            const hintText = result.candidates?.[0]?.content?.parts?.[0]?.text || "The circuit seems stable for now. Check the tile furthest from the power source.";
+
+            messageBox.textContent = `HINT: ${hintText}`;
+            messageBox.className = 'text-md font-medium mb-4 h-6 text-fuchsia-600';
+
+        } catch (error) {
+            console.error('Gemini Hint API Error:', error);
+            messageBox.textContent = 'Error: Could not retrieve hint. Please try again.';
+            messageBox.className = 'text-md font-medium mb-4 h-6 text-red-500';
+        } finally {
+            setLoading(false);
+        }
+    });
+
+    briefingButton.addEventListener('click', async () => {
+        if (isLoading || !isSoundOn) return; // Only narrate if sound is on
+        setLoading(true);
+
+        try {
+            const textPrompt = `Generate a short (1-2 sentence) dramatic mission briefing for restoring power to a space station's Level ${currentLevel}. Use the persona of a calm Mission Control specialist.`;
+            
+            const textPayload = {
+                contents: [{ parts: [{ text: textPrompt }] }],
+                systemInstruction: {
+                    parts: [{ text: "You are a Mission Control specialist. Provide a brief, professional update on the current power status." }]
+                }
+            };
+
+            const textResponse = await fetchWithExponentialBackoff(LLM_API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(textPayload)
+            });
+
+            const textResult = await textResponse.json();
+            const briefingText = textResult.candidates?.[0]?.content?.parts?.[0]?.text || `Level ${currentLevel} power is offline. Restore core circuit integrity immediately.`;
+            
+            messageBox.textContent = `Briefing: "${briefingText}"`;
+            messageBox.className = 'text-md font-medium mb-4 h-6 text-purple-600';
+
+            const ttsPayload = {
+                contents: [{ parts: [{ text: briefingText }] }],
+                generationConfig: TTS_VOICE_CONFIG
+            };
+
+            const ttsResponse = await fetchWithExponentialBackoff(TTS_API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(ttsPayload)
+            });
+
+            const ttsResult = await ttsResponse.json();
+            const audioPart = ttsResult?.candidates?.[0]?.content?.parts?.[0];
+            const audioData = audioPart?.inlineData?.data;
+            const mimeType = audioPart?.inlineData?.mimeType;
+
+            if (audioData && mimeType && mimeType.startsWith("audio/L16")) {
+                const pcmData = base64ToArrayBuffer(audioData);
+                const pcm16 = new Int16Array(pcmData);
+                
+                const rateMatch = mimeType.match(/rate=(\d+)/);
+                const sampleRate = rateMatch ? parseInt(rateMatch[1], 10) : 24000; 
+
+                const wavBlob = pcmToWav(pcm16, sampleRate);
+                
+                if (audioPlayer.src) URL.revokeObjectURL(audioPlayer.src);
+                audioPlayer.src = URL.createObjectURL(wavBlob);
+                audioPlayer.play();
+            } else {
+                console.error("TTS output missing or unexpected format.");
+                messageBox.textContent = "Error: Audio failed to load. Displaying text only.";
+            }
+
+        } catch (error) {
+            console.error('Gemini TTS Error:', error);
+            messageBox.textContent = 'Error: API call failed during briefing generation.';
+            messageBox.className = 'text-md font-medium mb-4 h-6 text-red-500';
+        } finally {
+            setLoading(false);
+        }
+    });
+
+
+    // --- Control Event Handlers ---
+
+    resetButton.addEventListener('click', () => {
+        startGame(currentLevel);
+        messageBox.textContent = 'Level reset. Wires shuffled.';
+        messageBox.className = 'text-md font-medium mb-4 h-6 text-yellow-500';
+    });
+
+    nextLevelButton.addEventListener('click', () => {
+        currentLevel++;
+        startGame(currentLevel);
+    });
+
+    // --- Accessibility/Settings Handlers ---
+
+    soundToggle.addEventListener('change', (event) => {
+        isSoundOn = event.target.checked;
+        if (!isSoundOn) {
+            if (audioPlayer.src) {
+                audioPlayer.pause();
+                audioPlayer.currentTime = 0;
+            }
+        }
+    });
+
+    colorBlindModeToggle.addEventListener('change', applyAccessibilitySettings);
+    largeTextModeToggle.addEventListener('change', applyAccessibilitySettings);
+
+    function applyAccessibilitySettings() {
+        // Color Blind Mode (Conceptual - would adjust colors/patterns)
+        if (colorBlindModeToggle.checked) {
+            document.body.classList.add('color-blind-mode');
+            // Example: Change glow color for better contrast against specific colorblind types
+            document.documentElement.style.setProperty('--glow-color', '#ff5722'); // Orange/Red glow
+            document.documentElement.style.setProperty('--start-end-color', '#2196f3'); // Blue for start/end
+            document.documentElement.style.setProperty('--path-color', '#b0bec5'); // More distinct gray for unlit paths
+        } else {
+            document.body.classList.remove('color-blind-mode');
+            document.documentElement.style.setProperty('--glow-color', '#3b82f6');
+            document.documentElement.style.setProperty('--start-end-color', '#f59e0b');
+            document.documentElement.style.setProperty('--path-color', '#93c5fd');
+        }
+
+        // Large Text Mode (Conceptual - would adjust font sizes globally)
+        if (largeTextModeToggle.checked) {
+            document.body.classList.add('large-text-mode');
+            document.documentElement.style.setProperty('font-size', '110%'); // Increase base font size
+        } else {
+            document.body.classList.remove('large-text-mode');
+            document.documentElement.style.setProperty('font-size', '100%'); // Reset base font size
+        }
+    }
+
+
+    // --- Initialization ---
+
+    function startGame(level) {
+        generateLevel(level);
+        render();
+        checkCircuit();
+        if (isGameComplete) render();
+        messageBox.textContent = `Connect the circuit.`;
+        messageBox.className = 'text-md font-medium mb-4 h-6 text-gray-600';
+        nextLevelButton.disabled = true;
+        applyAccessibilitySettings(); // Ensure settings are applied on level start
+    }
+
+    // Start the application by showing the main menu
+    window.onload = () => {
+        showScreen('mainMenuScreen');
+        applyAccessibilitySettings(); // Apply default settings on load
+        console.log("LOGIC LOOP loaded. HCI focus: enhanced UI, accessibility, and LLM integration.");
+    };
+
+</script>
+
+</body>
+</html>
